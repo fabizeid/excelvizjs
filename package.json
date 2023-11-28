@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "core-js": "^3.9.1",
+    "excel-formula-tokenizer": "^3.0.0",
     "gojs": "^2.3.11",
     "regenerator-runtime": "^0.13.7"
   },

@@ -4,6 +4,7 @@
  */
 
 import go from 'gojs'
+import { tokenize } from 'excel-formula-tokenizer';
 /* global console, document, Excel, Office */
 var names = {};
 function init() {
@@ -77,6 +78,49 @@ function traverseDom(node, parentName, dataArray) {
   return dataArray;
 }
 
+function get_formula_groups(formulasR1C1,formulasA) {
+  let groups = [];
+  for (var row = 0; row < formulasR1C1.length; row++) {
+    for (var col = 0; col < formulasR1C1[row].length; col++) {
+      let cellFormula = formulasR1C1[row][col];
+      if (typeof cellFormula === 'string' && cellFormula.startsWith('=')) {
+        // Breadth-First Search (BFS)
+        let stack = [[row, col]];
+        let current_group = [];
+        while (stack.length > 0) {
+          let [x, y] = stack.pop();
+          let cellFormula = formulasR1C1[x][y];
+          let cellFormulaA = formulasA[x][y];
+          const tokens = tokenize(cellFormulaA);
+          let operands = [];
+          tokens.forEach(({ value, type, subtype }) => {
+            if (type === 'operand') {
+              operands.push(value);
+            }
+          });
+
+          formulasR1C1[x][y] = null;
+          current_group.push({ cellFormula: cellFormula, operands: operands,loc:[x,y] });
+          const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]; // Directions: down, up, right, left
+          for (let [dx, dy] of directions) {
+            let new_x = x + dx;
+            let new_y = y + dy;
+            if (0 <= new_x && new_x < formulasR1C1.length && 0 <= new_y && new_y < formulasR1C1[0].length) {
+              //console.log(`value:   ${cellFormula}:${formulasR1C1[new_x][new_y]}`);
+              if (cellFormula === formulasR1C1[new_x][new_y]) {
+                //console.log('same');
+                stack.push([new_x, new_y]);
+              }
+            }
+          }
+        }
+        groups.push(current_group);
+      }
+    }
+  }
+  return groups;
+}
+
 // Give every node a unique name
 function getName(node) {
   var n = node.nodeName;
@@ -109,7 +153,7 @@ Office.onReady((info) => {
 });
 
 export async function run() {
-  init();
+  //init();
   try {
     await Excel.run(async (context) => {
       /**
@@ -120,21 +164,16 @@ export async function run() {
       var sheet = context.workbook.worksheets.getActiveWorksheet();
       var usedRange = sheet.getUsedRange();
       usedRange.load('formulasR1C1');
+      usedRange.load('formulas');
       
       await context.sync();
       //console.log(`The range address was ${range.address}.`);
       var formulasR1C1 = usedRange.formulasR1C1;
+      var formulasA = usedRange.formulas;
       var outputDiv = document.getElementById("formulas-output");
       outputDiv.innerHTML = ''; // Clear previous output
+      let groups = get_formula_groups(formulasR1C1,formulasA);
 
-      for (var row = 0; row < formulasR1C1.length; row++) {
-          for (var col = 0; col < formulasR1C1[row].length; col++) {
-            var cellFormula = formulasR1C1[row][col];
-            if (typeof cellFormula === 'string' && cellFormula.startsWith('=')) {
-              outputDiv.innerHTML += `R${row + 1}C${col + 1}: ${cellFormula}<br>`;
-            }
-          }
-      }
     });
   } catch (error) {
     console.error(error);
