@@ -18,13 +18,14 @@ function init() {
       {
         initialAutoScale: go.Diagram.UniformToFill,
         // define the layout for the diagram
-        layout: $(go.TreeLayout, { nodeSpacing: 5, layerSpacing: 30, arrangement: go.TreeLayout.ArrangementFixedRoots })
+        layout: $(go.TreeLayout, { nodeSpacing: 5, layerSpacing: 30
+          })
       });
-
+// arrangement: go.TreeLayout.ArrangementFixedRoots
   // Define a simple node template consisting of text followed by an expand/collapse button
   myDiagram.nodeTemplate =
     $(go.Node, "Horizontal",
-      { selectionChanged: nodeSelectionChanged },  // this event handler is defined below
+      //{ selectionChanged: nodeSelectionChanged },  // this event handler is defined below
       $(go.Panel, "Auto",
         $(go.Shape, { fill: "#1F4963", stroke: null }),
         $(go.TextBlock,
@@ -42,16 +43,38 @@ function init() {
     $(go.Link,
       { selectable: false },
       $(go.Shape));  // the link shape
-
+  
+  return myDiagram;
+  }
+function updateDiagram(myDiagram, fGroup){
   // create the model for the DOM tree
   myDiagram.model =
     new go.TreeModel( {
       isReadOnly: true,  // don't allow the user to delete or copy nodes
       // build up the tree in an Array of node data
-      nodeDataArray: traverseDom(document.activeElement)
+      //nodeDataArray: traverseDom(document.activeElement)
+      nodeDataArray: traverseFormulaGroups(fGroup)
     });
 }
+function traverseFormulaGroups(fGroup){
+  let dataArray = [];
+  for (var formulaIdx = 0; formulaIdx < fGroup.length; formulaIdx++) {
 
+    //for (var col = 0; col < formulasR1C1[row].length; col++) {
+    let cellFormula = fGroup[formulaIdx][0]['cellFormula'];
+    let operand = fGroup[formulaIdx][0]['operands'];
+    let data = { key:cellFormula, name: cellFormula };
+    data.parent = operand[0];
+    dataArray.push(data);
+    dataArray.push({key: operand[0],name:operand[0]})
+  }
+  // add a link to its parent
+  //if (parentName !== null) {
+  //  data.parent = parentName;
+ // }
+
+  return dataArray;
+}
 // Walk the DOM, starting at document, and return an Array of node data objects representing the DOM tree
 // Typical usage: traverseDom(document.activeElement)
 // The second and third arguments are internal, used when recursing through the DOM
@@ -148,12 +171,15 @@ Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     document.getElementById("sideload-msg").style.display = "none";
     document.getElementById("app-body").style.display = "flex";
-    document.getElementById("run").onclick = run;
+    let myDiagram = init();
+    document.getElementById("run").onclick = function() {
+      run(myDiagram);
+    };
   }
 });
 
-export async function run() {
-  //init();
+export async function run(myDiagram) {
+  //myDiagram = init();
   try {
     await Excel.run(async (context) => {
       /**
@@ -173,7 +199,7 @@ export async function run() {
       var outputDiv = document.getElementById("formulas-output");
       outputDiv.innerHTML = ''; // Clear previous output
       let groups = get_formula_groups(formulasR1C1,formulasA);
-
+      updateDiagram(myDiagram, groups)
     });
   } catch (error) {
     console.error(error);
