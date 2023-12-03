@@ -18,7 +18,10 @@ function init() {
       {
         initialAutoScale: go.Diagram.UniformToFill,
         // define the layout for the diagram
-        layout: $(go.TreeLayout, { nodeSpacing: 5, layerSpacing: 30
+        layout: $(go.LayeredDigraphLayout, {
+          //direction: 90, // layout direction
+        layerSpacing: 30, // space between layers
+        columnSpacing: 15, // space between columns
           })
       });
 // arrangement: go.TreeLayout.ArrangementFixedRoots
@@ -33,7 +36,7 @@ function init() {
             font: "bold 13px Helvetica, bold Arial, sans-serif",
             stroke: "white", margin: 3
           },
-          new go.Binding("text", "key"))
+          new go.Binding("text", "name"))
       ),
       $("TreeExpanderButton")
     );
@@ -47,58 +50,30 @@ function init() {
   return myDiagram;
   }
 function updateDiagram(myDiagram, fGroup){
-  // create the model for the DOM tree
-  myDiagram.model =
-    new go.TreeModel( {
-      isReadOnly: true,  // don't allow the user to delete or copy nodes
-      // build up the tree in an Array of node data
-      //nodeDataArray: traverseDom(document.activeElement)
-      nodeDataArray: traverseFormulaGroups(fGroup)
-    });
+  let { nodeDataArray, linkDataArray } = traverseFormulaGroups(fGroup);
+  myDiagram.model =new go.GraphLinksModel(nodeDataArray, linkDataArray);
 }
 function traverseFormulaGroups(fGroup){
   let dataArray = [];
-  for (var formulaIdx = 0; formulaIdx < fGroup.length; formulaIdx++) {
+  let linkArray = [];
 
-    //for (var col = 0; col < formulasR1C1[row].length; col++) {
-    let cellFormula = fGroup[formulaIdx][0]['cellFormula'];
-    let operand = fGroup[formulaIdx][0]['operands'];
-    let data = { key:cellFormula, name: cellFormula };
-    data.parent = operand[0];
-    dataArray.push(data);
-    dataArray.push({key: operand[0],name:operand[0]})
-  }
-  // add a link to its parent
-  //if (parentName !== null) {
-  //  data.parent = parentName;
- // }
+  fGroup.forEach((formula) => {
+    let cellFormula = formula.cellFormula;
+    let operands = formula.operands;
 
-  return dataArray;
-}
-// Walk the DOM, starting at document, and return an Array of node data objects representing the DOM tree
-// Typical usage: traverseDom(document.activeElement)
-// The second and third arguments are internal, used when recursing through the DOM
-function traverseDom(node, parentName, dataArray) {
-  if (parentName === undefined) parentName = null;
-  if (dataArray === undefined) dataArray = [];
-  // skip everything but HTML Elements
-  if (!(node instanceof Element)) return;
-  // Ignore the navigation menus
-  if (node.id === "navSide" || node.id === "navTop") return;
-  // add this node to the nodeDataArray
-  var name = getName(node);
-  var data = { key: name, name: name };
-  dataArray.push(data);
-  // add a link to its parent
-  if (parentName !== null) {
-    data.parent = parentName;
-  }
-  // find all children
-  var l = node.childNodes.length;
-  for (var i = 0; i < l; i++) {
-    traverseDom(node.childNodes[i], name, dataArray);
-  }
-  return dataArray;
+    // Add the node
+    dataArray.push({ key: cellFormula, name: cellFormula });
+
+    // Add links (parent-child relationships)
+    operands.forEach(operand => {
+      let opKey = operand[0].toString()
+      linkArray.push({ from: opKey, to: cellFormula });
+      if (!dataArray.some(d => d.key === opKey)) {
+        dataArray.push({ key: opKey, name: opKey });
+      }
+    });
+  });
+  return { nodeDataArray: dataArray, linkDataArray: linkArray };
 }
 
 function get_formula_groups(formulasR1C1,formulasA) {
@@ -109,21 +84,25 @@ function get_formula_groups(formulasR1C1,formulasA) {
       if (typeof cellFormula === 'string' && cellFormula.startsWith('=')) {
         // Breadth-First Search (BFS)
         let stack = [[row, col]];
-        let current_group = [];
+        let current_group = {cellFormula: cellFormula, operands:[],loc:[]};
         while (stack.length > 0) {
           let [x, y] = stack.pop();
           let cellFormula = formulasR1C1[x][y];
           let cellFormulaA = formulasA[x][y];
-          const tokens = tokenize(cellFormulaA);
-          let operands = [];
-          tokens.forEach(({ value, type, subtype }) => {
+          const tokens = tokenize(cellFormula);
+          let index = 0;
+          tokens.forEach(({ value, type}) => {
             if (type === 'operand') {
-              operands.push(value);
+              // Initialize operands[index] with an empty array if it doesn't exist
+              current_group.operands[index] ||= [];
+              let coordValue = parseR1C1Reference(value,[x,y]);
+              current_group.operands[index].push(...coordValue);
+              index++;
             }
           });
 
           formulasR1C1[x][y] = null;
-          current_group.push({ cellFormula: cellFormula, operands: operands,loc:[x,y] });
+          current_group.loc.push([x,y]);
           const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]; // Directions: down, up, right, left
           for (let [dx, dy] of directions) {
             let new_x = x + dx;
@@ -143,28 +122,50 @@ function get_formula_groups(formulasR1C1,formulasA) {
   }
   return groups;
 }
+function calculateRC(fGroup){
+  fGroup.forEach((formula) => {
+    let baseRC = formula.loc;
+    let operands = formula.operands;
+    for (let opIdx = 0; opIdx < operands.length; opIdx++) {
+      for (let opIdx2 = 0; opIdx2 < operands[opIdx].length; opIdx2++) {
+        let op = parseR1C1Reference(operands[opIdx][opIdx2],baseRC);
+        console.log(op);
+      }
+    }
+  });
+  
+  return group;
+}
+function parseR1C1Reference(ref, baseRC) {
+  let baseRow = baseRC[0];
+  let baseCol = baseRC[1];
+  if (ref.includes(':')) {
+      var parts = ref.split(':');
+      var start = parseSingleR1C1Reference(parts[0], baseRow, baseCol);
+      var end = parseSingleR1C1Reference(parts[1], baseRow, baseCol);
 
-// Give every node a unique name
-function getName(node) {
-  var n = node.nodeName;
-  if (node.id) n = n + " (" + node.id + ")";
-  var namenum = n;  // make sure the name is unique
-  var i = 1;
-  while (names[namenum] !== undefined) {
-    namenum = n + i;
-    i++;
+      var allCells = [];
+      for (var row = start.row; row <= end.row; row++) {
+          for (var col = start.column; col <= end.column; col++) {
+              allCells.push([row, col]);
+          }
+      }
+      return allCells;
+  } else {
+      var singleRef = parseSingleR1C1Reference(ref, baseRow, baseCol);
+      return [[singleRef.row, singleRef.column]];
   }
-  names[namenum] = node;
-  return namenum;
 }
 
-// When a Node is selected, highlight the corresponding HTML element.
-function nodeSelectionChanged(node) {
-  if (node.isSelected) {
-    names[node.data.name].style.backgroundColor = "lightblue";
-  } else {
-    names[node.data.name].style.backgroundColor = "";
-  }
+function parseSingleR1C1Reference(ref, baseRow, baseCol) {
+  var match = ref.match(/R(\[?-?\d*\]?)(?:C(\[?-?\d*\]?))?/);
+  var rowOffset = match[1];
+  var colOffset = match[2];
+
+  rowOffset = rowOffset.includes('[') ? parseInt(rowOffset.replace(/\[|\]/g, '')) : parseInt(rowOffset) || 0;
+  colOffset = colOffset.includes('[') ? parseInt(colOffset.replace(/\[|\]/g, '')) : parseInt(colOffset) || 0;
+
+  return { row: rowOffset+baseRow, column: colOffset+baseCol };
 }
 
 Office.onReady((info) => {
@@ -199,6 +200,7 @@ export async function run(myDiagram) {
       var outputDiv = document.getElementById("formulas-output");
       outputDiv.innerHTML = ''; // Clear previous output
       let groups = get_formula_groups(formulasR1C1,formulasA);
+      //groups = calculateRC(groups);
       updateDiagram(myDiagram, groups)
     });
   } catch (error) {
