@@ -50,24 +50,111 @@ function init() {
   return myDiagram;
   }
 function updateDiagram(myDiagram, fGroup){
-  let { nodeDataArray, linkDataArray } = traverseFormulaGroups(fGroup);
+  traverseFormulaGroups(fGroup);
+  let { nodeDataArray, linkDataArray } = createGraph(fGroup)
   myDiagram.model =new go.GraphLinksModel(nodeDataArray, linkDataArray);
 }
-function traverseFormulaGroups(fGroup){
+
+function traverseFormulaGroups(fGroup) {
   let dataArray = [];
   let linkArray = [];
+  let coordToKeys = new Map();
+  let keysTorange = new Map();
+  fGroup.forEach((formula) => {
+    let rangeKey = keysTorange.size;
+    formula.loc.key = rangeKey;
+    keysTorange.set(rangeKey, formula.loc)
+    formula.loc.value.forEach(coord => {
+      coordToKeys.set(coord.toString(), [rangeKey]);
+    });
+  });
+  fGroup.forEach((formula) => {
+    let operands = formula.operands;
+    operands.forEach(operand => {
+      let rangeKey = keysTorange.size;
+      keysTorange.set(rangeKey, operand)
+      operand.key = rangeKey;
+      operand.value.forEach(coord => {
+        let coordStr = coord.toString();
+        if (coordToKeys.has(coordStr)) {
+          coordToKeys.get(coordStr).push(rangeKey);
+        } else {
+          coordToKeys.set(coordStr, [rangeKey]);
+        }
+      });
+    });
+  });
+
+
+  //record overlap keys in each range
+  for (const rangeKeys of coordToKeys.values()) {
+    if (rangeKeys.length > 1) {
+      //there is an overlap
+      for (const rangeKey of rangeKeys) {
+        let range = keysTorange.get(rangeKey);
+        const overlapKeys = range.overlapKeys;
+        if (overlapKeys === undefined) {
+          range.overlapKeys = [rangeKeys]
+        } else {
+          overlapKeys.push(rangeKeys)
+        }
+      }
+    }
+  }
+
+  //process overlap keys to find subsets and matches
+  for (const [rangeKey, range] of keysTorange.entries()) {
+    let overlapKeys = range.overlapKeys;
+    if (overlapKeys !== undefined) {
+      let overlapMetrics = new Map();
+      for (let coord of overlapKeys) {
+        for (let key of coord) {
+          if (rangeKey !== key) {
+            if (overlapMetrics.has(key)) {
+              overlapMetrics.set(key, overlapMetrics.get(key) + 1);
+            } else {
+              overlapMetrics.set(key, 1);
+            }
+          }
+        }
+      }
+      range.overlapMetrics = overlapMetrics;
+    }
+  }
+  for (const [rangeKey, range] of keysTorange.entries()) {
+    let rangeSize = range.value.length;
+    let overlapMetrics = range.overlapMetrics;
+    if (overlapMetrics !== undefined) {
+      for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
+        if (numOverLap === rangeSize) {
+          // overLappingRangeKey and rangeKey are same node
+          let overLappingRange = keysTorange.get(overLappingRangeKey);
+          if (overLappingRange.value.length === rangeSize) {
+            overLappingRange.key = rangeKey;
+            keysTorange.delete(overLappingRangeKey);
+          }
+        }
+      }
+    }
+  }
+}
+
+function createGraph(fGroup){
+  let dataArray = [];
+  let linkArray = [];
+
 
   fGroup.forEach((formula) => {
     let cellFormula = formula.cellFormula;
     let operands = formula.operands;
 
     // Add the node
-    dataArray.push({ key: cellFormula, name: cellFormula });
+    dataArray.push({ key: formula.loc.key, name: cellFormula });
 
     // Add links (parent-child relationships)
     operands.forEach(operand => {
-      let opKey = operand[0].toString()
-      linkArray.push({ from: opKey, to: cellFormula });
+      let opKey = operand.key
+      linkArray.push({ from: opKey, to: formula.loc.key });
       if (!dataArray.some(d => d.key === opKey)) {
         dataArray.push({ key: opKey, name: opKey });
       }
@@ -84,7 +171,7 @@ function get_formula_groups(formulasR1C1,formulasA) {
       if (typeof cellFormula === 'string' && cellFormula.startsWith('=')) {
         // Breadth-First Search (BFS)
         let stack = [[row, col]];
-        let current_group = {cellFormula: cellFormula, operands:[],loc:[]};
+        let current_group = {cellFormula: cellFormula, operands:[],loc:{value:[]}};
         while (stack.length > 0) {
           let [x, y] = stack.pop();
           let cellFormula = formulasR1C1[x][y];
@@ -94,15 +181,15 @@ function get_formula_groups(formulasR1C1,formulasA) {
           tokens.forEach(({ value, type}) => {
             if (type === 'operand') {
               // Initialize operands[index] with an empty array if it doesn't exist
-              current_group.operands[index] ||= [];
+              current_group.operands[index] ||= {value:[]};
               let coordValue = parseR1C1Reference(value,[x,y]);
-              current_group.operands[index].push(...coordValue);
+              current_group.operands[index].value.push(...coordValue);
               index++;
             }
           });
 
           formulasR1C1[x][y] = null;
-          current_group.loc.push([x,y]);
+          current_group.loc.value.push([x,y]);
           const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]; // Directions: down, up, right, left
           for (let [dx, dy] of directions) {
             let new_x = x + dx;
