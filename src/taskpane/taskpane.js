@@ -202,7 +202,7 @@ function createGraph(fGroup,linkArray) {
   return { nodeDataArray: dataArray, linkDataArray: linkArray };
 }
 
-function get_formula_groups(formulasR1C1,formulasA) {
+function get_formula_groups(startCoord,formulasR1C1,formulasA) {
   let groups = [];
   for (var row = 0; row < formulasR1C1.length; row++) {
     for (var col = 0; col < formulasR1C1[row].length; col++) {
@@ -221,14 +221,14 @@ function get_formula_groups(formulasR1C1,formulasA) {
             if (type === 'operand') {
               // Initialize operands[index] with an empty array if it doesn't exist
               current_group.operands[index] ||= {value:[]};
-              let coordValue = parseR1C1Reference(value,[x,y]);
+              let coordValue = parseR1C1Reference(value,[x+startCoord[0],y+startCoord[1]]);
               current_group.operands[index].value.push(...coordValue);
               index++;
             }
           });
 
           formulasR1C1[x][y] = null;
-          current_group.loc.value.push([x,y]);
+          current_group.loc.value.push([x+startCoord[0],y+startCoord[1]]);
           const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]; // Directions: down, up, right, left
           for (let [dx, dy] of directions) {
             let new_x = x + dx;
@@ -318,14 +318,15 @@ export async function run(myDiagram) {
       var usedRange = sheet.getUsedRange();
       usedRange.load('formulasR1C1');
       usedRange.load('formulas');
-      
+      usedRange.load('rowIndex');
+      usedRange.load('columnIndex');
       await context.sync();
       //console.log(`The range address was ${range.address}.`);
       var formulasR1C1 = usedRange.formulasR1C1;
       var formulasA = usedRange.formulas;
       var outputDiv = document.getElementById("formulas-output");
       outputDiv.innerHTML = ''; // Clear previous output
-      let groups = get_formula_groups(formulasR1C1,formulasA);
+      let groups = get_formula_groups([usedRange.rowIndex,usedRange.columnIndex],formulasR1C1,formulasA);
       //groups = calculateRC(groups);
       updateDiagram(myDiagram, groups)
     });
