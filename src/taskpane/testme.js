@@ -69,22 +69,53 @@ function traverseFormulaGroups(fGroup) {
         let overlapMetrics = range.overlapMetrics;
         if (overlapMetrics !== undefined) {
             for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
+                let overLappingRange = keysTorange.get(overLappingRangeKey);
+                if (overLappingRange === undefined){
+                    continue; //might have been deleted
+                }
+                let overLappingRangSize = overLappingRange.value.length;
                 if (numOverLap === rangeSize) {
                     // overLappingRangeKey and rangeKey are same node
-                    let overLappingRange = keysTorange.get(overLappingRangeKey);
-                    if (overLappingRange.value.length === rangeSize) {
+                    if ( overLappingRangSize === rangeSize) {
                         overLappingRange.key = rangeKey;
                         keysTorange.delete(overLappingRangeKey);
+                    } else {
+                        //range is a subset of overLappingRange
+                        linkArray.push({ from: overLappingRangeKey, to: rangeKey });
+                        //other thatn the above link (and the forlmula link)
+                        //don't add any more links to the subsets
+                        keysTorange.delete(rangeKey);
                     }
+                 }
+            }
+        }
+    }
+    //remove links from subset nodes (links from their superset should be enough)
+    linkArray = linkArray.filter(link => keysTorange.has(link.from));
+    for (const [rangeKey, range] of keysTorange.entries()) {
+        let rangeSize = range.value.length;
+        let overlapMetrics = range.overlapMetrics;
+        if (overlapMetrics !== undefined) {
+            for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
+                let overLappingRange = keysTorange.get(overLappingRangeKey);
+                if (overLappingRange === undefined){
+                    continue; //might have been deleted
+                }
+                let overLappingRangSize = overLappingRange.value.length;
+                if (numOverLap < rangeSize) {
+                    if (overLappingRangSize > rangeSize){
+                        linkArray.push({ from: overLappingRangeKey, to: rangeKey });
+                    }
+                } else { 
+                    throw new Error('Should never get here');
                 }
             }
         }
     }
+    return linkArray;
 }
-function createGraph(fGroup) {
+function createGraph(fGroup,linkArray) {
     let dataArray = [];
-    let linkArray = [];
-
 
     fGroup.forEach((formula) => {
         let cellFormula = formula.cellFormula;
@@ -107,6 +138,6 @@ function createGraph(fGroup) {
 //const json = '[{"cellFormula":"=SUM(RC[-2]:RC[-1])","operands":[[[1,0],[1,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1]]],"loc":[[1,2],[2,2],[3,2],[4,2],[5,2]]},{"cellFormula":"=RC[-2]+RC[-4]","operands":[[[1,2],[2,2],[3,2],[4,2],[5,2]],[[1,0],[2,0],[3,0],[4,0],[5,0]]],"loc":[[1,4],[2,4],[3,4],[4,4],[5,4]]},{"cellFormula":"=R[-6]C-R[-5]C","operands":[[[1,0],[1,1],[1,2]],[[2,0],[2,1],[2,2]]],"loc":[[7,0],[7,1],[7,2]]}]';
 const json = '[{"cellFormula":"=SUM(RC[-2]:RC[-1])","operands":[{"value":[[1,0],[1,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1]]}],"loc":{"value":[[1,2],[2,2],[3,2],[4,2],[5,2]]}},{"cellFormula":"=RC[-2]+RC[-4]","operands":[{"value":[[1,2],[2,2],[3,2],[4,2],[5,2]]},{"value":[[1,0],[2,0],[3,0],[4,0],[5,0]]}],"loc":{"value":[[1,4],[2,4],[3,4],[4,4],[5,4]]}},{"cellFormula":"=R[-6]C-R[-5]C","operands":[{"value":[[1,0],[1,1],[1,2]]},{"value":[[2,0],[2,1],[2,2]]}],"loc":{"value":[[7,0],[7,1],[7,2]]}}]';
 let fGroup = JSON.parse(json);
-traverseFormulaGroups(fGroup);
-let ret = createGraph(fGroup);
+let linkArray = traverseFormulaGroups(fGroup);
+let ret = createGraph(fGroup,linkArray);
 console.log('hi')

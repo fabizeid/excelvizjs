@@ -50,8 +50,8 @@ function init() {
   return myDiagram;
   }
 function updateDiagram(myDiagram, fGroup){
-  traverseFormulaGroups(fGroup);
-  let { nodeDataArray, linkDataArray } = createGraph(fGroup)
+  let linkArray = traverseFormulaGroups(fGroup);
+  let { nodeDataArray, linkDataArray } = createGraph(fGroup,linkArray)
   myDiagram.model =new go.GraphLinksModel(nodeDataArray, linkDataArray);
 }
 
@@ -61,104 +61,134 @@ function traverseFormulaGroups(fGroup) {
   let coordToKeys = new Map();
   let keysTorange = new Map();
   fGroup.forEach((formula) => {
-    let rangeKey = keysTorange.size;
-    formula.loc.key = rangeKey;
-    keysTorange.set(rangeKey, formula.loc)
-    formula.loc.value.forEach(coord => {
-      coordToKeys.set(coord.toString(), [rangeKey]);
-    });
+      let rangeKey = keysTorange.size;
+      formula.loc.key = rangeKey;
+      keysTorange.set(rangeKey, formula.loc)
+      formula.loc.value.forEach(coord => {
+          coordToKeys.set(coord.toString(), [rangeKey]);
+      });
   });
   fGroup.forEach((formula) => {
-    let operands = formula.operands;
-    operands.forEach(operand => {
-      let rangeKey = keysTorange.size;
-      keysTorange.set(rangeKey, operand)
-      operand.key = rangeKey;
-      operand.value.forEach(coord => {
-        let coordStr = coord.toString();
-        if (coordToKeys.has(coordStr)) {
-          coordToKeys.get(coordStr).push(rangeKey);
-        } else {
-          coordToKeys.set(coordStr, [rangeKey]);
-        }
+      let operands = formula.operands;
+      operands.forEach(operand => {
+          let rangeKey = keysTorange.size;
+          keysTorange.set(rangeKey, operand)
+          operand.key = rangeKey;
+          operand.value.forEach(coord => {
+              let coordStr = coord.toString();
+              if (coordToKeys.has(coordStr)) {
+                  coordToKeys.get(coordStr).push(rangeKey);
+              } else {
+                  coordToKeys.set(coordStr, [rangeKey]);
+              }
+          });
       });
-    });
   });
 
 
   //record overlap keys in each range
   for (const rangeKeys of coordToKeys.values()) {
-    if (rangeKeys.length > 1) {
-      //there is an overlap
-      for (const rangeKey of rangeKeys) {
-        let range = keysTorange.get(rangeKey);
-        const overlapKeys = range.overlapKeys;
-        if (overlapKeys === undefined) {
-          range.overlapKeys = [rangeKeys]
-        } else {
-          overlapKeys.push(rangeKeys)
-        }
+      if (rangeKeys.length > 1) {
+          //there is an overlap
+          for (const rangeKey of rangeKeys) {
+              let range = keysTorange.get(rangeKey);
+              const overlapKeys = range.overlapKeys;
+              if (overlapKeys === undefined) {
+                  range.overlapKeys = [rangeKeys]
+              } else {
+                  overlapKeys.push(rangeKeys)
+              }
+          }
       }
-    }
   }
 
   //process overlap keys to find subsets and matches
   for (const [rangeKey, range] of keysTorange.entries()) {
-    let overlapKeys = range.overlapKeys;
-    if (overlapKeys !== undefined) {
-      let overlapMetrics = new Map();
-      for (let coord of overlapKeys) {
-        for (let key of coord) {
-          if (rangeKey !== key) {
-            if (overlapMetrics.has(key)) {
-              overlapMetrics.set(key, overlapMetrics.get(key) + 1);
-            } else {
-              overlapMetrics.set(key, 1);
-            }
+      let overlapKeys = range.overlapKeys;
+      if (overlapKeys !== undefined) {
+          let overlapMetrics = new Map();
+          for (let coord of overlapKeys) {
+              for (let key of coord) {
+                  if (rangeKey !== key) {
+                      if (overlapMetrics.has(key)) {
+                          overlapMetrics.set(key, overlapMetrics.get(key) + 1);
+                      } else {
+                          overlapMetrics.set(key, 1);
+                      }
+                  }
+              }
           }
-        }
+          range.overlapMetrics = overlapMetrics;
       }
-      range.overlapMetrics = overlapMetrics;
-    }
   }
   for (const [rangeKey, range] of keysTorange.entries()) {
-    let rangeSize = range.value.length;
-    let overlapMetrics = range.overlapMetrics;
-    if (overlapMetrics !== undefined) {
-      for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
-        if (numOverLap === rangeSize) {
-          // overLappingRangeKey and rangeKey are same node
-          let overLappingRange = keysTorange.get(overLappingRangeKey);
-          if (overLappingRange.value.length === rangeSize) {
-            overLappingRange.key = rangeKey;
-            keysTorange.delete(overLappingRangeKey);
+      let rangeSize = range.value.length;
+      let overlapMetrics = range.overlapMetrics;
+      if (overlapMetrics !== undefined) {
+          for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
+              let overLappingRange = keysTorange.get(overLappingRangeKey);
+              if (overLappingRange === undefined){
+                  continue; //might have been deleted
+              }
+              let overLappingRangSize = overLappingRange.value.length;
+              if (numOverLap === rangeSize) {
+                  // overLappingRangeKey and rangeKey are same node
+                  if ( overLappingRangSize === rangeSize) {
+                      overLappingRange.key = rangeKey;
+                      keysTorange.delete(overLappingRangeKey);
+                  } else {
+                      //range is a subset of overLappingRange
+                      linkArray.push({ from: overLappingRangeKey, to: rangeKey });
+                      //other thatn the above link (and the forlmula link)
+                      //don't add any more links to the subsets
+                      keysTorange.delete(rangeKey);
+                  }
+               }
           }
-        }
       }
-    }
   }
+  //remove links from subset nodes (links from their superset should be enough)
+  linkArray = linkArray.filter(link => keysTorange.has(link.from));
+  for (const [rangeKey, range] of keysTorange.entries()) {
+      let rangeSize = range.value.length;
+      let overlapMetrics = range.overlapMetrics;
+      if (overlapMetrics !== undefined) {
+          for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
+              let overLappingRange = keysTorange.get(overLappingRangeKey);
+              if (overLappingRange === undefined){
+                  continue; //might have been deleted
+              }
+              let overLappingRangSize = overLappingRange.value.length;
+              if (numOverLap < rangeSize) {
+                  if (overLappingRangSize > rangeSize){
+                      linkArray.push({ from: overLappingRangeKey, to: rangeKey });
+                  }
+              } else { 
+                  throw new Error('Should never get here');
+              }
+          }
+      }
+  }
+  return linkArray;
 }
-
-function createGraph(fGroup){
+function createGraph(fGroup,linkArray) {
   let dataArray = [];
-  let linkArray = [];
-
 
   fGroup.forEach((formula) => {
-    let cellFormula = formula.cellFormula;
-    let operands = formula.operands;
+      let cellFormula = formula.cellFormula;
+      let operands = formula.operands;
 
-    // Add the node
-    dataArray.push({ key: formula.loc.key, name: cellFormula });
+      // Add the node
+      dataArray.push({ key: formula.loc.key, name: cellFormula });
 
-    // Add links (parent-child relationships)
-    operands.forEach(operand => {
-      let opKey = operand.key
-      linkArray.push({ from: opKey, to: formula.loc.key });
-      if (!dataArray.some(d => d.key === opKey)) {
-        dataArray.push({ key: opKey, name: opKey });
-      }
-    });
+      // Add links (parent-child relationships)
+      operands.forEach(operand => {
+          let opKey = operand.key
+          linkArray.push({ from: opKey, to: formula.loc.key });
+          if (!dataArray.some(d => d.key === opKey)) {
+              dataArray.push({ key: opKey, name: opKey });
+          }
+      });
   });
   return { nodeDataArray: dataArray, linkDataArray: linkArray };
 }
