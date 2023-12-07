@@ -53,9 +53,9 @@ function init() {
 // When a Node is selected, highlight the corresponding HTML element.
 function nodeSelectionChanged(node) {
   if (node.isSelected) {
-    highlight(node.data.range.value)
+    highlight(node.data)
   } else {
-    clearHighlight(node.data.range.value)
+    clearHighlight(node.data)
   }
 }
 function updateDiagram(myDiagram, fGroup){
@@ -334,12 +334,27 @@ export async function run(myDiagram) {
   }
 }
 
-export async function highlight(rangeRC) {
+export async function highlight(nodeData) {
   try {
     await Excel.run(async (context) => {
-
+      let coordinates = nodeData.range.value;
       var sheet = context.workbook.worksheets.getActiveWorksheet();
-      rangeRC.forEach(coord => {
+      coordinates.forEach(coord => {
+        var cell = sheet.getCell(coord.row, coord.column);
+        //cell.format.fill.load('color')
+        cell.load('format/fill/color');
+      });
+      await context.sync();
+      let originalColors = [];
+      coordinates.forEach(coord => {
+        var cell = sheet.getCell(coord.row, coord.column);
+        //originalColors.push({coord: coord, color: cell.format.fill.color});
+        originalColors.push({coord: coord,color: 'none'});
+        cell.format.fill.color = 'yellow';
+      });
+      nodeData.originalColors = originalColors;
+
+      coordinates.forEach(coord => {
         var cell = sheet.getCell(coord[0], coord[1]);
         cell.format.fill.color = 'yellow';
       });
@@ -350,13 +365,14 @@ export async function highlight(rangeRC) {
   }
 }
 
-export async function clearHighlight(rangeRC) {
+export async function clearHighlight(nodeData) {
   try {
     await Excel.run(async (context) => {
 
       var sheet = context.workbook.worksheets.getActiveWorksheet();
-      rangeRC.forEach(coord => {
-        var cell = sheet.getCell(coord[0], coord[1]);
+      nodeData.originalColors.forEach(item => {
+        var cell = sheet.getCell(item.coord[0], item.coord[1]);
+        //cell.format.fill.color = item.color;
         cell.format.fill.clear();
       });
       await context.sync();
