@@ -339,25 +339,22 @@ export async function highlight(nodeData) {
     await Excel.run(async (context) => {
       let coordinates = nodeData.range.value;
       var sheet = context.workbook.worksheets.getActiveWorksheet();
+      let highlightCells = [];
       coordinates.forEach(coord => {
-        var cell = sheet.getCell(coord.row, coord.column);
-        //cell.format.fill.load('color')
+        var cell = sheet.getCell(coord[0], coord[1]);
         cell.load('format/fill/color');
+        highlightCells.push(cell);
       });
+
       await context.sync();
       let originalColors = [];
-      coordinates.forEach(coord => {
-        var cell = sheet.getCell(coord.row, coord.column);
-        //originalColors.push({coord: coord, color: cell.format.fill.color});
-        originalColors.push({coord: coord,color: 'none'});
+      coordinates.forEach((coord , index) => {
+        var cell = highlightCells[index];
+        originalColors.push({coord: coord, color: cell.format.fill.color});
         cell.format.fill.color = 'yellow';
       });
       nodeData.originalColors = originalColors;
 
-      coordinates.forEach(coord => {
-        var cell = sheet.getCell(coord[0], coord[1]);
-        cell.format.fill.color = 'yellow';
-      });
       await context.sync();
     });
   } catch (error) {
@@ -372,8 +369,8 @@ export async function clearHighlight(nodeData) {
       var sheet = context.workbook.worksheets.getActiveWorksheet();
       nodeData.originalColors.forEach(item => {
         var cell = sheet.getCell(item.coord[0], item.coord[1]);
-        //cell.format.fill.color = item.color;
-        cell.format.fill.clear();
+        cell.format.fill.color = item.color;
+        //cell.format.fill.clear();
       });
       await context.sync();
     });
