@@ -1,3 +1,4 @@
+
 function traverseFormulaGroups(fGroup) {
     let dataArray = [];
     let linkArray = [];
@@ -27,8 +28,8 @@ function traverseFormulaGroups(fGroup) {
             });
         });
     });
-
-
+  
+  
     //record overlap keys in each range
     for (const rangeKeys of coordToKeys.values()) {
         if (rangeKeys.length > 1) {
@@ -44,7 +45,7 @@ function traverseFormulaGroups(fGroup) {
             }
         }
     }
-
+  
     //process overlap keys to find subsets and matches
     for (const [rangeKey, range] of keysTorange.entries()) {
         let overlapKeys = range.overlapKeys;
@@ -113,28 +114,60 @@ function traverseFormulaGroups(fGroup) {
         }
     }
     return linkArray;
-}
-function createGraph(fGroup,linkArray) {
+  }
+  function columnNumberToLetter(columnIndex) {
+    let columnLetter = '';
+    let columnNumber = columnIndex + 1;
+    while (columnNumber > 0) {
+        let modulo = (columnNumber - 1) % 26;
+        columnLetter = String.fromCharCode(65 + modulo) + columnLetter;
+        columnNumber = Math.floor((columnNumber - modulo) / 26);
+    }
+    return columnLetter;
+  }
+  
+  function getRangeFromCoord(operand){
+    let coordinates = operand.value;
+    if (coordinates.length === 0) {
+        return null;
+    }
+  
+    let minX = coordinates[0][0];
+    let maxX = coordinates[0][0];
+    let minY = coordinates[0][1];
+    let maxY = coordinates[0][1];
+  
+    coordinates.forEach(coord => {
+        minX = Math.min(minX, coord[0]);
+        maxX = Math.max(maxX, coord[0]);
+        minY = Math.min(minY, coord[1]);
+        maxY = Math.max(maxY, coord[1]);
+    });
+    minX += 1;
+    maxX += 1;
+    return columnNumberToLetter(minY) + minX  + ':' + columnNumberToLetter(maxY) + maxX;
+  }
+  function createGraph(fGroup,linkArray) {
     let dataArray = [];
-
+  
     fGroup.forEach((formula) => {
         let cellFormula = formula.cellFormula;
         let operands = formula.operands;
-
+        let name = getRangeFromCoord(formula.loc) + "\n" + cellFormula
         // Add the node
-        dataArray.push({ key: formula.loc.key, name: cellFormula });
-
+        dataArray.push({ key: formula.loc.key, name: name,range:formula.loc });
+  
         // Add links (parent-child relationships)
         operands.forEach(operand => {
             let opKey = operand.key
             linkArray.push({ from: opKey, to: formula.loc.key });
             if (!dataArray.some(d => d.key === opKey)) {
-                dataArray.push({ key: opKey, name: opKey });
+                dataArray.push({ key: opKey, name: getRangeFromCoord(operand),range:operand });
             }
         });
     });
     return { nodeDataArray: dataArray, linkDataArray: linkArray };
-}
+  }
 //const json = '[{"cellFormula":"=SUM(RC[-2]:RC[-1])","operands":[{"value":[[1,0],[1,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1]]}],"loc":{"value":[[1,2],[2,2],[3,2],[4,2],[5,2]]}},{"cellFormula":"=RC[-2]+RC[-4]","operands":[{"value":[[1,2],[2,2],[3,2],[4,2],[5,2]]},{"value":[[1,0],[2,0],[3,0],[4,0],[5,0]]}],"loc":{"value":[[1,4],[2,4],[3,4],[4,4],[5,4]]}},{"cellFormula":"=R[-6]C-R[-5]C","operands":[{"value":[[1,0],[1,1],[1,2]]},{"value":[[2,0],[2,1],[2,2]]}],"loc":{"value":[[7,0],[7,1],[7,2]]}}]';
   const json = '[{"cellFormula":"=SUM(RC[-2]:RC[-1])","operands":[{"value":[[1,0],[1,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1]]}],"loc":{"value":[[1,2],[2,2],[3,2],[4,2],[5,2]]}},{"cellFormula":"=RC[-2]+RC[-4]","operands":[{"value":[[1,2],[2,2],[3,2],[4,2],[5,2]]},{"value":[[1,0],[2,0],[3,0],[4,0],[5,0]]}],"loc":{"value":[[1,4],[2,4],[3,4],[4,4],[5,4]]}},{"cellFormula":"=R[-6]C-R[-5]C","operands":[{"value":[[1,0],[1,1],[1,2],[1,3]]},{"value":[[2,0],[2,1],[2,2],[2,3]]}],"loc":{"value":[[7,0],[7,1],[7,2],[7,3]]}}]'
 let fGroup = JSON.parse(json);

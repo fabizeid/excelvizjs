@@ -180,22 +180,54 @@ function traverseFormulaGroups(fGroup) {
   }
   return linkArray;
 }
+function columnNumberToLetter(columnIndex) {
+  let columnLetter = '';
+  let columnNumber = columnIndex + 1;
+  while (columnNumber > 0) {
+      let modulo = (columnNumber - 1) % 26;
+      columnLetter = String.fromCharCode(65 + modulo) + columnLetter;
+      columnNumber = Math.floor((columnNumber - modulo) / 26);
+  }
+  return columnLetter;
+}
+
+function getRangeFromCoord(operand){
+  let coordinates = operand.value;
+  if (coordinates.length === 0) {
+      return null;
+  }
+
+  let minX = coordinates[0][0];
+  let maxX = coordinates[0][0];
+  let minY = coordinates[0][1];
+  let maxY = coordinates[0][1];
+
+  coordinates.forEach(coord => {
+      minX = Math.min(minX, coord[0]);
+      maxX = Math.max(maxX, coord[0]);
+      minY = Math.min(minY, coord[1]);
+      maxY = Math.max(maxY, coord[1]);
+  });
+  minX += 1;
+  maxX += 1;
+  return columnNumberToLetter(minY) + minX  + ':' + columnNumberToLetter(maxY) + maxX;
+}
 function createGraph(fGroup,linkArray) {
   let dataArray = [];
 
   fGroup.forEach((formula) => {
       let cellFormula = formula.cellFormula;
       let operands = formula.operands;
-
+      let name = getRangeFromCoord(formula.loc) + "\n" + cellFormula
       // Add the node
-      dataArray.push({ key: formula.loc.key, name: cellFormula,range:formula.loc });
+      dataArray.push({ key: formula.loc.key, name: name,range:formula.loc });
 
       // Add links (parent-child relationships)
       operands.forEach(operand => {
           let opKey = operand.key
           linkArray.push({ from: opKey, to: formula.loc.key });
           if (!dataArray.some(d => d.key === opKey)) {
-              dataArray.push({ key: opKey, name: opKey,range:operand });
+              dataArray.push({ key: opKey, name: getRangeFromCoord(operand),range:operand });
           }
       });
   });
