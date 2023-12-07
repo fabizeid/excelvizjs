@@ -249,8 +249,8 @@ function get_formula_groups(startCoord,formulasR1C1,formulasA) {
           let cellFormulaA = formulasA[x][y];
           const tokens = tokenize(cellFormula);
           let index = 0;
-          tokens.forEach(({ value, type}) => {
-            if (type === 'operand') {
+          tokens.forEach(({ value, type, subtype}) => {
+            if (type === 'operand' && subtype === 'range') {
               // Initialize operands[index] with an empty array if it doesn't exist
               current_group.operands[index] ||= {value:[]};
               let coordValue = parseR1C1Reference(value,[x+startCoord[0],y+startCoord[1]]);
