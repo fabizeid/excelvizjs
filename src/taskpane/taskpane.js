@@ -28,7 +28,7 @@ function init() {
   // Define a simple node template consisting of text followed by an expand/collapse button
   myDiagram.nodeTemplate =
     $(go.Node, "Horizontal",
-      //{ selectionChanged: nodeSelectionChanged },  // this event handler is defined below
+      { selectionChanged: nodeSelectionChanged },  // this event handler is defined below
       $(go.Panel, "Auto",
         $(go.Shape, { fill: "#1F4963", stroke: null }),
         $(go.TextBlock,
@@ -49,8 +49,17 @@ function init() {
   
   return myDiagram;
   }
+
+// When a Node is selected, highlight the corresponding HTML element.
+function nodeSelectionChanged(node) {
+  if (node.isSelected) {
+    highlight(node.data.range.value)
+  } else {
+    clearHighlight(node.data.range.value)
+  }
+}
 function updateDiagram(myDiagram, fGroup){
-  let linkArray = traverseFormulaGroups(fGroup);
+  let linkArray = traverseFormulaGroups(fGroup); //JSON.stringify(fGroup)
   let { nodeDataArray, linkDataArray } = createGraph(fGroup,linkArray)
   myDiagram.model =new go.GraphLinksModel(nodeDataArray, linkDataArray);
 }
@@ -179,14 +188,14 @@ function createGraph(fGroup,linkArray) {
       let operands = formula.operands;
 
       // Add the node
-      dataArray.push({ key: formula.loc.key, name: cellFormula });
+      dataArray.push({ key: formula.loc.key, name: cellFormula,range:formula.loc });
 
       // Add links (parent-child relationships)
       operands.forEach(operand => {
           let opKey = operand.key
           linkArray.push({ from: opKey, to: formula.loc.key });
           if (!dataArray.some(d => d.key === opKey)) {
-              dataArray.push({ key: opKey, name: opKey });
+              dataArray.push({ key: opKey, name: opKey,range:operand });
           }
       });
   });
@@ -319,6 +328,38 @@ export async function run(myDiagram) {
       let groups = get_formula_groups(formulasR1C1,formulasA);
       //groups = calculateRC(groups);
       updateDiagram(myDiagram, groups)
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function highlight(rangeRC) {
+  try {
+    await Excel.run(async (context) => {
+
+      var sheet = context.workbook.worksheets.getActiveWorksheet();
+      rangeRC.forEach(coord => {
+        var cell = sheet.getCell(coord[0], coord[1]);
+        cell.format.fill.color = 'yellow';
+      });
+      await context.sync();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function clearHighlight(rangeRC) {
+  try {
+    await Excel.run(async (context) => {
+
+      var sheet = context.workbook.worksheets.getActiveWorksheet();
+      rangeRC.forEach(coord => {
+        var cell = sheet.getCell(coord[0], coord[1]);
+        cell.format.fill.clear();
+      });
+      await context.sync();
     });
   } catch (error) {
     console.error(error);
