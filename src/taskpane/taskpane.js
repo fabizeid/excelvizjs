@@ -227,7 +227,11 @@ function createGraph(fGroup,linkArray) {
           let opKey = operand.key
           linkArray.push({ from: opKey, to: formula.loc.key });
           if (!dataArray.some(d => d.key === opKey)) {
-              dataArray.push({ key: opKey, name: getRangeFromCoord(operand),range:operand });
+              let name = getRangeFromCoord(operand);
+              if(formula.loc.sheetName !== operand.sheetName){
+                name = operand.sheetName + "!" + name;
+              }
+              dataArray.push({ key: opKey, name:name ,range:operand });
           }
       });
   });
