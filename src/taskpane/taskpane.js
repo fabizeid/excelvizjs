@@ -6,7 +6,7 @@
 import go from 'gojs'
 import { tokenize } from 'excel-formula-tokenizer';
 /* global console, document, Excel, Office */
-var names = {};
+let names = {};
 function init() {
 
   // Since 2.2 you can also author concise templates with method chaining instead of GraphObject.make
@@ -234,15 +234,15 @@ function createGraph(fGroup,linkArray) {
   return { nodeDataArray: dataArray, linkDataArray: linkArray };
 }
 
-function get_formula_groups(startCoord,formulasR1C1,formulasA) {
+function get_formula_groups(activeSheetName,startCoord,formulasR1C1,formulasA) {
   let groups = [];
-  for (var row = 0; row < formulasR1C1.length; row++) {
-    for (var col = 0; col < formulasR1C1[row].length; col++) {
+  for (let row = 0; row < formulasR1C1.length; row++) {
+    for (let col = 0; col < formulasR1C1[row].length; col++) {
       let cellFormula = formulasR1C1[row][col];
       if (typeof cellFormula === 'string' && cellFormula.startsWith('=')) {
         // Breadth-First Search (BFS)
         let stack = [[row, col]];
-        let current_group = {cellFormula: cellFormula, operands:[],loc:{value:[]}};
+        let current_group = {cellFormula: cellFormula, operands:[],loc:{sheetName: activeSheetName,value:[]}};
         while (stack.length > 0) {
           let [x, y] = stack.pop();
           let cellFormula = formulasR1C1[x][y];
@@ -253,8 +253,9 @@ function get_formula_groups(startCoord,formulasR1C1,formulasA) {
             if (type === 'operand' && subtype === 'range') {
               // Initialize operands[index] with an empty array if it doesn't exist
               current_group.operands[index] ||= {value:[]};
-              let coordValue = parseR1C1Reference(value,[x+startCoord[0],y+startCoord[1]]);
+              let [sheetName ,coordValue] = parseR1C1Reference(activeSheetName,value,[x+startCoord[0],y+startCoord[1]]);
               current_group.operands[index].value.push(...coordValue);
+              current_group.operands[index].sheetName = sheetName;
               index++;
             }
           });
@@ -280,45 +281,38 @@ function get_formula_groups(startCoord,formulasR1C1,formulasA) {
   }
   return groups;
 }
-function calculateRC(fGroup){
-  fGroup.forEach((formula) => {
-    let baseRC = formula.loc;
-    let operands = formula.operands;
-    for (let opIdx = 0; opIdx < operands.length; opIdx++) {
-      for (let opIdx2 = 0; opIdx2 < operands[opIdx].length; opIdx2++) {
-        let op = parseR1C1Reference(operands[opIdx][opIdx2],baseRC);
-        console.log(op);
-      }
-    }
-  });
-  
-  return group;
-}
-function parseR1C1Reference(ref, baseRC) {
+
+function parseR1C1Reference(activeSheetName,ref, baseRC) {
   let baseRow = baseRC[0];
   let baseCol = baseRC[1];
+  let sheetName = activeSheetName;
+  if (ref.includes('!')) {
+    let parts = ref.split('!');
+    sheetName = parts[0];
+    ref = parts[1];
+  }
   if (ref.includes(':')) {
-      var parts = ref.split(':');
-      var start = parseSingleR1C1Reference(parts[0], baseRow, baseCol);
-      var end = parseSingleR1C1Reference(parts[1], baseRow, baseCol);
+      let parts = ref.split(':');
+      let start = parseSingleR1C1Reference(parts[0], baseRow, baseCol);
+      let end = parseSingleR1C1Reference(parts[1], baseRow, baseCol);
 
-      var allCells = [];
-      for (var row = start.row; row <= end.row; row++) {
-          for (var col = start.column; col <= end.column; col++) {
+      let allCells = [];
+      for (let row = start.row; row <= end.row; row++) {
+          for (let col = start.column; col <= end.column; col++) {
               allCells.push([row, col]);
           }
       }
-      return allCells;
+      return [sheetName, allCells];
   } else {
-      var singleRef = parseSingleR1C1Reference(ref, baseRow, baseCol);
-      return [[singleRef.row, singleRef.column]];
+      let singleRef = parseSingleR1C1Reference(ref, baseRow, baseCol);
+      return [sheetName, [[singleRef.row, singleRef.column]]];
   }
 }
 
 function parseSingleR1C1Reference(ref, baseRow, baseCol) {
-  var match = ref.match(/R(\[?-?\d*\]?)(?:C(\[?-?\d*\]?))?/);
-  var rowOffset = match[1];
-  var colOffset = match[2];
+  let match = ref.match(/R(\[?-?\d*\]?)(?:C(\[?-?\d*\]?))?/);
+  let rowOffset = match[1];
+  let colOffset = match[2];
 
   rowOffset = rowOffset.includes('[') ? parseInt(rowOffset.replace(/\[|\]/g, '')) : parseInt(rowOffset) || 0;
   colOffset = colOffset.includes('[') ? parseInt(colOffset.replace(/\[|\]/g, '')) : parseInt(colOffset) || 0;
@@ -346,19 +340,20 @@ export async function run(myDiagram) {
        */
 
 
-      var sheet = context.workbook.worksheets.getActiveWorksheet();
-      var usedRange = sheet.getUsedRange();
+      let sheet = context.workbook.worksheets.getActiveWorksheet();
+      sheet.load('name');
+      let usedRange = sheet.getUsedRange();
       usedRange.load('formulasR1C1');
       usedRange.load('formulas');
       usedRange.load('rowIndex');
       usedRange.load('columnIndex');
       await context.sync();
       //console.log(`The range address was ${range.address}.`);
-      var formulasR1C1 = usedRange.formulasR1C1;
-      var formulasA = usedRange.formulas;
-      var outputDiv = document.getElementById("formulas-output");
+      let formulasR1C1 = usedRange.formulasR1C1;
+      let formulasA = usedRange.formulas;
+      let outputDiv = document.getElementById("formulas-output");
       outputDiv.innerHTML = ''; // Clear previous output
-      let groups = get_formula_groups([usedRange.rowIndex,usedRange.columnIndex],formulasR1C1,formulasA);
+      let groups = get_formula_groups(sheet.name,[usedRange.rowIndex,usedRange.columnIndex],formulasR1C1,formulasA);
       //groups = calculateRC(groups);
       updateDiagram(myDiagram, groups)
     });
@@ -371,10 +366,17 @@ export async function highlight(nodeData) {
   try {
     await Excel.run(async (context) => {
       let coordinates = nodeData.range.value;
-      var sheet = context.workbook.worksheets.getActiveWorksheet();
+      let sheetName = nodeData.range.sheetName;
+      let sheet;
+      if (sheetName === "") {
+        sheet = context.workbook.worksheets.getActiveWorksheet();
+      } else {
+        sheet = context.workbook.worksheets.getItem(sheetName);
+        sheet.activate();
+      }
       let highlightCells = [];
       coordinates.forEach(coord => {
-        var cell = sheet.getCell(coord[0], coord[1]);
+        let cell = sheet.getCell(coord[0], coord[1]);
         cell.load('format/fill/color');
         highlightCells.push(cell);
       });
@@ -382,7 +384,7 @@ export async function highlight(nodeData) {
       await context.sync();
       let originalColors = [];
       coordinates.forEach((coord , index) => {
-        var cell = highlightCells[index];
+        let cell = highlightCells[index];
         originalColors.push({coord: coord, color: cell.format.fill.color});
         cell.format.fill.color = 'yellow';
       });
@@ -398,12 +400,20 @@ export async function highlight(nodeData) {
 export async function clearHighlight(nodeData) {
   try {
     await Excel.run(async (context) => {
-
-      var sheet = context.workbook.worksheets.getActiveWorksheet();
+      let sheetName = nodeData.range.sheetName;
+      let sheet;
+      if (sheetName === "") {
+        sheet = context.workbook.worksheets.getActiveWorksheet();
+      } else {
+        sheet = context.workbook.worksheets.getItem(sheetName);
+      }
       nodeData.originalColors.forEach(item => {
-        var cell = sheet.getCell(item.coord[0], item.coord[1]);
-        cell.format.fill.color = item.color;
-        //cell.format.fill.clear();
+        let cell = sheet.getCell(item.coord[0], item.coord[1]);
+        if(item.color === "#FFFFFF"){
+          cell.format.fill.clear();
+        } else {
+          cell.format.fill.color = item.color;
+        }
       });
       await context.sync();
     });
