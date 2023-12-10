@@ -46,7 +46,7 @@ function init() {
     $(go.Link,
       { selectable: false },
       $(go.Shape));  // the link shape
-  
+
   return myDiagram;
   }
 
@@ -172,7 +172,7 @@ function traverseFormulaGroups(fGroup) {
                   if (overLappingRangSize > rangeSize){
                       linkArray.push({ from: overLappingRangeKey, to: rangeKey });
                   }
-              } else { 
+              } else {
                   throw new Error('Should never get here');
               }
           }
@@ -237,8 +237,18 @@ function createGraph(fGroup,linkArray) {
   });
   return { nodeDataArray: dataArray, linkDataArray: linkArray };
 }
-
-function get_formula_groups(activeSheetName,startCoord,formulasR1C1,formulasA) {
+function getRangeNamesToRef(rangeNames, rangeNamesw){
+ let rangeNamesToRef = new Map()
+  rangeNames.forEach(({ name, formula}) => {
+    rangeNamesToRef.set(name,formula.substring(1))
+  });
+  rangeNamesw.forEach(({ name, formula}) => {
+    if(!rangeNamesToRef.has(name))
+    rangeNamesToRef.set(name,formula.substring(1))
+  });
+  return rangeNamesToRef;
+}
+function get_formula_groups(activeSheetName,rangeNamesToRef,startCoord,formulasR1C1,formulasA) {
   let groups = [];
   for (let row = 0; row < formulasR1C1.length; row++) {
     for (let col = 0; col < formulasR1C1[row].length; col++) {
@@ -256,6 +266,9 @@ function get_formula_groups(activeSheetName,startCoord,formulasR1C1,formulasA) {
           tokens.forEach(({ value, type, subtype}) => {
             if (type === 'operand' && subtype === 'range') {
               // Initialize operands[index] with an empty array if it doesn't exist
+              if(rangeNamesToRef.has(value)){
+                value = rangeNamesToRef.get(value);
+              }
               current_group.operands[index] ||= {value:[]};
               let [sheetName ,coordValue] = parseR1C1Reference(activeSheetName,value,[x+startCoord[0],y+startCoord[1]]);
               current_group.operands[index].value.push(...coordValue);
@@ -292,7 +305,7 @@ function parseR1C1Reference(activeSheetName,ref, baseRC) {
   let sheetName = activeSheetName;
   if (ref.includes('!')) {
     let parts = ref.split('!');
-    sheetName = parts[0];
+    sheetName = parts[0].replace(/^'|'$/g, ''); //remove extra quotes if they exist
     ref = parts[1];
   }
   if (ref.includes(':')) {
@@ -345,19 +358,29 @@ export async function run(myDiagram) {
 
 
       let sheet = context.workbook.worksheets.getActiveWorksheet();
+      let rangeNamesw = context.workbook.names
+      let rangeNames = sheet.names;
+      rangeNames.load("items/name,items/formula");
+      rangeNamesw.load("items/name,items/formula");
+
       sheet.load('name');
       let usedRange = sheet.getUsedRange();
       usedRange.load('formulasR1C1');
       usedRange.load('formulas');
       usedRange.load('rowIndex');
       usedRange.load('columnIndex');
+      //let namedRange = sheet.names.getItem("Mode");
       await context.sync();
       //console.log(`The range address was ${range.address}.`);
       let formulasR1C1 = usedRange.formulasR1C1;
       let formulasA = usedRange.formulas;
       let outputDiv = document.getElementById("formulas-output");
       outputDiv.innerHTML = ''; // Clear previous output
-      let groups = get_formula_groups(sheet.name,[usedRange.rowIndex,usedRange.columnIndex],formulasR1C1,formulasA);
+      let rangeNamesToRef = getRangeNamesToRef(rangeNames.items, rangeNamesw.items)
+      let groups = get_formula_groups(sheet.name, rangeNamesToRef,
+      [usedRange.rowIndex, usedRange.columnIndex],
+        formulasR1C1,
+        formulasA);
       //groups = calculateRC(groups);
       updateDiagram(myDiagram, groups)
     });
