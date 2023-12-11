@@ -236,7 +236,7 @@ function createGraph(fGroup,linkArray) {
           }
           if(!uniqueOperands.has(name)){
             uniqueOperands.add(name);
-            linkArray.push({ from: opKey, to: formula.loc.key });
+            linkArray.push({ to: opKey, from: formula.loc.key });
             if (!dataArray.some(d => d.key === opKey)) {
                 dataArray.push({ key: opKey, name:name ,range:operand });
             }
