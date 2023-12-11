@@ -221,23 +221,26 @@ function createGraph(fGroup,linkArray) {
       let name = getRangeFromCoord(formula.loc) + "\n" + cellFormula
       // Add the node
       dataArray.push({ key: formula.loc.key, name: name,range:formula.loc });
-
+      const uniqueOperands = new Set();
       // Add links (parent-child relationships)
       operands.forEach(operand => {
           let opKey = operand.key
-          linkArray.push({ from: opKey, to: formula.loc.key });
-          if (!dataArray.some(d => d.key === opKey)) {
-            let name;
-            if(operand.value.length === 0){
-              name = 'workbook!' + operand.sheetName;
-            } else {
-              name = getRangeFromCoord(operand);
-              if(formula.loc.sheetName !== operand.sheetName){
-                name = operand.sheetName + "!" + name;
-              }
+          let name;
+          if(operand.value.length === 0){
+            name = 'workbook!' + operand.sheetName;
+          } else {
+            name = getRangeFromCoord(operand);
+            if(formula.loc.sheetName !== operand.sheetName){
+              name = operand.sheetName + "!" + name;
             }
-              dataArray.push({ key: opKey, name:name ,range:operand });
           }
+          if(!uniqueOperands.has(name)){
+            uniqueOperands.add(name);
+            linkArray.push({ from: opKey, to: formula.loc.key });
+            if (!dataArray.some(d => d.key === opKey)) {
+                dataArray.push({ key: opKey, name:name ,range:operand });
+            }
+        }
       });
   });
   return { nodeDataArray: dataArray, linkDataArray: linkArray };
