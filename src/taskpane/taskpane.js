@@ -227,10 +227,15 @@ function createGraph(fGroup,linkArray) {
           let opKey = operand.key
           linkArray.push({ from: opKey, to: formula.loc.key });
           if (!dataArray.some(d => d.key === opKey)) {
-              let name = getRangeFromCoord(operand);
+            let name;
+            if(operand.value.length === 0){
+              name = 'workbook!' + operand.sheetName;
+            } else {
+              name = getRangeFromCoord(operand);
               if(formula.loc.sheetName !== operand.sheetName){
                 name = operand.sheetName + "!" + name;
               }
+            }
               dataArray.push({ key: opKey, name:name ,range:operand });
           }
       });
@@ -266,13 +271,15 @@ function get_formula_groups(activeSheetName,rangeNamesToRef,startCoord,formulasR
           tokens.forEach(({ value, type, subtype}) => {
             if (type === 'operand' && subtype === 'range') {
               // Initialize operands[index] with an empty array if it doesn't exist
-              if(rangeNamesToRef.has(value)){
-                value = rangeNamesToRef.get(value);
-              }
               current_group.operands[index] ||= {value:[]};
-              let [sheetName ,coordValue] = parseR1C1Reference(activeSheetName,value,[x+startCoord[0],y+startCoord[1]]);
-              current_group.operands[index].value.push(...coordValue);
-              current_group.operands[index].sheetName = sheetName;
+              //if(rangeNamesToRef.has(value)){
+                //TODO need to create nodes to all named ranges
+                //current_group.operands[index].namedR =  rangeNamesToRef.get(value);
+              //} else {
+                let [sheetName ,coordValue] = parseR1C1Reference(activeSheetName,value,[x+startCoord[0],y+startCoord[1]]);
+                current_group.operands[index].value.push(...coordValue);
+                current_group.operands[index].sheetName = sheetName;
+              //}
               index++;
             }
           });
@@ -322,12 +329,19 @@ function parseR1C1Reference(activeSheetName,ref, baseRC) {
       return [sheetName, allCells];
   } else {
       let singleRef = parseSingleR1C1Reference(ref, baseRow, baseCol);
+      if (singleRef == null) {
+        //named range
+        return [ref,[]];
+      }
       return [sheetName, [[singleRef.row, singleRef.column]]];
   }
 }
 
 function parseSingleR1C1Reference(ref, baseRow, baseCol) {
   let match = ref.match(/R(\[?-?\d*\]?)(?:C(\[?-?\d*\]?))?/);
+  if (match == null) {
+    return null;
+  }
   let rowOffset = match[1];
   let colOffset = match[2];
 
@@ -395,6 +409,10 @@ export async function highlight(nodeData) {
       let coordinates = nodeData.range.value;
       let sheetName = nodeData.range.sheetName;
       let sheet;
+      if (coordinates.length === 0) {
+        nodeData.originalColors = [];
+        return;
+      }
       if (sheetName === "") {
         sheet = context.workbook.worksheets.getActiveWorksheet();
       } else {
@@ -429,6 +447,9 @@ export async function clearHighlight(nodeData) {
     await Excel.run(async (context) => {
       let sheetName = nodeData.range.sheetName;
       let sheet;
+      if(nodeData.originalColors.length === 0){
+        return;
+      }
       if (sheetName === "") {
         sheet = context.workbook.worksheets.getActiveWorksheet();
       } else {
