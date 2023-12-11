@@ -391,8 +391,6 @@ export async function run(myDiagram) {
       //console.log(`The range address was ${range.address}.`);
       let formulasR1C1 = usedRange.formulasR1C1;
       let formulasA = usedRange.formulas;
-      let outputDiv = document.getElementById("formulas-output");
-      outputDiv.innerHTML = ''; // Clear previous output
       let rangeNamesToRef = getRangeNamesToRef(rangeNames.items, rangeNamesw.items)
       let groups = get_formula_groups(sheet.name, rangeNamesToRef,
       [usedRange.rowIndex, usedRange.columnIndex],
