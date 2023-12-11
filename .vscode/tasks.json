@@ -126,5 +126,15 @@
       },
       "problemMatcher": []
     },
+    {
+      "label": "kill webview",
+      "type": "shell",
+      "command": "taskkill -F -IM msedge.exe -IM msedgewebview2.exe",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
   ]
 }

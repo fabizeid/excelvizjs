@@ -218,9 +218,14 @@ function createGraph(fGroup,linkArray) {
   fGroup.forEach((formula) => {
       let cellFormula = formula.cellFormula;
       let operands = formula.operands;
-      let name = getRangeFromCoord(formula.loc) + "\n" + cellFormula
+      let fName;
+      if(formula.loc.value.length === 0){
+        fName = 'workbook!' + formula.loc.sheetName + "\n" + cellFormula;
+      } else {
+        fName = getRangeFromCoord(formula.loc) + "\n" + cellFormula
+      }
       // Add the node
-      dataArray.push({ key: formula.loc.key, name: name,range:formula.loc });
+      dataArray.push({ key: formula.loc.key, name: fName,range:formula.loc });
       const uniqueOperands = new Set();
       // Add links (parent-child relationships)
       operands.forEach(operand => {
@@ -256,6 +261,26 @@ function getRangeNamesToRef(rangeNames, rangeNamesw){
   });
   return rangeNamesToRef;
 }
+function get_named_groups(activeSheetName,rangeNames, rangeNamesw){
+  let groups = [];
+  rangeNamesw.forEach(({ name, formula}) => {
+    let current_group = {cellFormula: formula, operands:[],loc:{sheetName: name,value:[]}};
+    const tokens = tokenize(formula);
+    let index = 0;
+    tokens.forEach(({ value, type, subtype}) => {
+      if (type === 'operand' && subtype === 'range') {
+        // Initialize operands[index] with an empty array if it doesn't exist
+        current_group.operands[index] ||= {value:[]};
+        let [sheetName ,coordValue] = parseReference(activeSheetName,value,[0,0],false);
+        current_group.operands[index].value.push(...coordValue);
+        current_group.operands[index].sheetName = sheetName;
+        index++;
+      }
+    });
+    groups.push(current_group);
+  });
+  return groups;
+}
 function get_formula_groups(activeSheetName,rangeNamesToRef,startCoord,formulasR1C1,formulasA) {
   let groups = [];
   for (let row = 0; row < formulasR1C1.length; row++) {
@@ -275,14 +300,9 @@ function get_formula_groups(activeSheetName,rangeNamesToRef,startCoord,formulasR
             if (type === 'operand' && subtype === 'range') {
               // Initialize operands[index] with an empty array if it doesn't exist
               current_group.operands[index] ||= {value:[]};
-              //if(rangeNamesToRef.has(value)){
-                //TODO need to create nodes to all named ranges
-                //current_group.operands[index].namedR =  rangeNamesToRef.get(value);
-              //} else {
-                let [sheetName ,coordValue] = parseR1C1Reference(activeSheetName,value,[x+startCoord[0],y+startCoord[1]]);
-                current_group.operands[index].value.push(...coordValue);
-                current_group.operands[index].sheetName = sheetName;
-              //}
+              let [sheetName ,coordValue] = parseReference(activeSheetName,value,[x+startCoord[0],y+startCoord[1]],true);
+              current_group.operands[index].value.push(...coordValue);
+              current_group.operands[index].sheetName = sheetName;
               index++;
             }
           });
@@ -309,10 +329,16 @@ function get_formula_groups(activeSheetName,rangeNamesToRef,startCoord,formulasR
   return groups;
 }
 
-function parseR1C1Reference(activeSheetName,ref, baseRC) {
+function parseReference(activeSheetName,ref, baseRC,R1C1) {
   let baseRow = baseRC[0];
   let baseCol = baseRC[1];
   let sheetName = activeSheetName;
+  let parseSingleReference;
+  if(R1C1){
+    parseSingleReference = parseSingleR1C1Reference;
+  } else {
+    parseSingleReference = parseSingleA1Reference;
+  }
   if (ref.includes('!')) {
     let parts = ref.split('!');
     sheetName = parts[0].replace(/^'|'$/g, ''); //remove extra quotes if they exist
@@ -320,8 +346,8 @@ function parseR1C1Reference(activeSheetName,ref, baseRC) {
   }
   if (ref.includes(':')) {
       let parts = ref.split(':');
-      let start = parseSingleR1C1Reference(parts[0], baseRow, baseCol);
-      let end = parseSingleR1C1Reference(parts[1], baseRow, baseCol);
+      let start = parseSingleReference(parts[0], baseRow, baseCol);
+      let end = parseSingleReference(parts[1], baseRow, baseCol);
 
       let allCells = [];
       for (let row = start.row; row <= end.row; row++) {
@@ -331,7 +357,7 @@ function parseR1C1Reference(activeSheetName,ref, baseRC) {
       }
       return [sheetName, allCells];
   } else {
-      let singleRef = parseSingleR1C1Reference(ref, baseRow, baseCol);
+      let singleRef = parseSingleReference(ref, baseRow, baseCol);
       if (singleRef == null) {
         //named range
         return [ref,[]];
@@ -339,7 +365,23 @@ function parseR1C1Reference(activeSheetName,ref, baseRC) {
       return [sheetName, [[singleRef.row, singleRef.column]]];
   }
 }
+function parseSingleA1Reference(ref, baseRow, baseCol) {
 
+  let matchCol = ref.match(/[A-Z]+/)
+  let matchRow = ref.match(/\d+/)
+  if (matchCol == null || matchRow == null) {
+    return null;
+  }
+  const column = matchCol[0];
+  const row = parseInt(matchRow[0], 10);
+
+  let colNumber = 0;
+  for (let i = 0; i < column.length; i++) {
+      colNumber = colNumber * 26 + (column.charCodeAt(i) - 64);
+  }
+
+  return { row: row - 1, column: colNumber-1};
+}
 function parseSingleR1C1Reference(ref, baseRow, baseCol) {
   let match = ref.match(/R(\[?-?\d*\]?)(?:C(\[?-?\d*\]?))?/);
   if (match == null) {
@@ -392,12 +434,13 @@ export async function run(myDiagram) {
       let formulasR1C1 = usedRange.formulasR1C1;
       let formulasA = usedRange.formulas;
       let rangeNamesToRef = getRangeNamesToRef(rangeNames.items, rangeNamesw.items)
+      let groupsN = get_named_groups(sheet.name,rangeNames.items, rangeNamesw.items);
       let groups = get_formula_groups(sheet.name, rangeNamesToRef,
       [usedRange.rowIndex, usedRange.columnIndex],
         formulasR1C1,
         formulasA);
       //groups = calculateRC(groups);
-      updateDiagram(myDiagram, groups)
+      updateDiagram(myDiagram,  groupsN.concat(groups))
     });
   } catch (error) {
     console.error(error);
