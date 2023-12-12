@@ -59,11 +59,42 @@ function nodeSelectionChanged(node) {
   }
 }
 function updateDiagram(myDiagram, fGroup){
+  //downloadObjectAsJson(fGroup, "test")
+  //downloadObjectAsJs(fGroup, "test2")
   let linkArray = traverseFormulaGroups(fGroup); //JSON.stringify(fGroup)
   let { nodeDataArray, linkDataArray } = createGraph(fGroup,linkArray)
   myDiagram.model =new go.GraphLinksModel(nodeDataArray, linkDataArray);
 }
 
+function downloadObjectAsJson(exportObj, exportName) {
+  var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+  var downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", exportName + ".json");
+  document.body.appendChild(downloadAnchorNode); // required for Firefox
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
+
+function downloadObjectAsJs(exportObj, exportName) {
+  // Convert the object to a string and format it as a JS variable
+  var jsContent = "const " + exportName + " = " + JSON.stringify(exportObj, null, 4) + ";";
+
+  // Create a Blob object with the JS content and the correct MIME type
+  var blob = new Blob([jsContent], { type: 'text/javascript' });
+  var url = URL.createObjectURL(blob);
+
+  // Create a temporary link element and trigger the download
+  var downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.href = url;
+  downloadAnchorNode.download = exportName + ".js";
+  document.body.appendChild(downloadAnchorNode); // Required for Firefox
+  downloadAnchorNode.click();
+
+  // Clean up by removing the temporary link and revoking the Blob URL
+  document.body.removeChild(downloadAnchorNode);
+  URL.revokeObjectURL(url);
+}
 function traverseFormulaGroups(fGroup) {
   let dataArray = [];
   let linkArray = [];
@@ -73,9 +104,13 @@ function traverseFormulaGroups(fGroup) {
       let rangeKey = keysTorange.size;
       formula.loc.key = rangeKey;
       keysTorange.set(rangeKey, formula.loc)
+        if(formula.loc.value.length === 0){
+            coordToKeys.set(formula.loc.sheetName, [rangeKey]);
+        } else {
       formula.loc.value.forEach(coord => {
           coordToKeys.set(coord.toString(), [rangeKey]);
       });
+        }
   });
   fGroup.forEach((formula) => {
       let operands = formula.operands;
@@ -83,6 +118,14 @@ function traverseFormulaGroups(fGroup) {
           let rangeKey = keysTorange.size;
           keysTorange.set(rangeKey, operand)
           operand.key = rangeKey;
+            if(operand.value.length === 0){ 
+                let coordStr = operand.sheetName;
+                if (coordToKeys.has(coordStr)) {
+                    coordToKeys.get(coordStr).push(rangeKey);
+                } else {
+                    coordToKeys.set(coordStr, [rangeKey]);
+                }
+            } else {
           operand.value.forEach(coord => {
               let coordStr = coord.toString();
               if (coordToKeys.has(coordStr)) {
@@ -91,6 +134,7 @@ function traverseFormulaGroups(fGroup) {
                   coordToKeys.set(coordStr, [rangeKey]);
               }
           });
+            }
       });
   });
 
@@ -132,6 +176,7 @@ function traverseFormulaGroups(fGroup) {
   }
   for (const [rangeKey, range] of keysTorange.entries()) {
       let rangeSize = range.value.length;
+        rangeSize = rangeSize === 0?1:rangeSize;//hack for named ranges
       let overlapMetrics = range.overlapMetrics;
       if (overlapMetrics !== undefined) {
           for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
@@ -140,6 +185,7 @@ function traverseFormulaGroups(fGroup) {
                   continue; //might have been deleted
               }
               let overLappingRangSize = overLappingRange.value.length;
+                overLappingRangSize = overLappingRangSize === 0?1:overLappingRangSize;//hack for named ranges
               if (numOverLap === rangeSize) {
                   // overLappingRangeKey and rangeKey are same node
                   if ( overLappingRangSize === rangeSize) {
@@ -360,7 +406,7 @@ function parseReference(activeSheetName,ref, baseRC,R1C1) {
       let singleRef = parseSingleReference(ref, baseRow, baseCol);
       if (singleRef == null) {
         //named range
-        return [ref,[]];
+        return [ref.replace(/^@/, ''),[]];
       }
       return [sheetName, [[singleRef.row, singleRef.column]]];
   }
