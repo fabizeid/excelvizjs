@@ -263,7 +263,6 @@ function createGraph(fGroup,linkArray) {
 
   fGroup.forEach((formula) => {
       let cellFormula = formula.cellFormula;
-      let operands = formula.operands;
       let fName;
       if(formula.loc.value.length === 0){
         fName = 'workbook!' + formula.loc.sheetName + "\n" + cellFormula;
@@ -272,6 +271,9 @@ function createGraph(fGroup,linkArray) {
       }
       // Add the node
       dataArray.push({ key: formula.loc.key, name: fName,range:formula.loc });
+    });
+    fGroup.forEach((formula) => {
+      let operands = formula.operands;
       const uniqueOperands = new Set();
       // Add links (parent-child relationships)
       operands.forEach(operand => {
