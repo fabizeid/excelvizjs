@@ -96,7 +96,6 @@ function downloadObjectAsJs(exportObj, exportName) {
   URL.revokeObjectURL(url);
 }
 function traverseFormulaGroups(fGroup) {
-  let dataArray = [];
   let linkArray = [];
   let coordToKeys = new Map();
   let keysTorange = new Map();
@@ -108,7 +107,7 @@ function traverseFormulaGroups(fGroup) {
             coordToKeys.set(formula.loc.sheetName, [rangeKey]);
         } else {
       formula.loc.value.forEach(coord => {
-          coordToKeys.set(coord.toString(), [rangeKey]);
+          coordToKeys.set(formula.loc.sheetName+coord.toString(), [rangeKey]);
       });
         }
   });
@@ -127,7 +126,7 @@ function traverseFormulaGroups(fGroup) {
                 }
             } else {
           operand.value.forEach(coord => {
-              let coordStr = coord.toString();
+              let coordStr = operand.sheetName + coord.toString();
               if (coordToKeys.has(coordStr)) {
                   coordToKeys.get(coordStr).push(rangeKey);
               } else {
