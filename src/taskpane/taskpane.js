@@ -192,7 +192,7 @@ function traverseFormulaGroups(fGroup) {
                       keysTorange.delete(overLappingRangeKey);
                   } else {
                       //range is a subset of overLappingRange
-                      linkArray.push({ from: overLappingRangeKey, to: rangeKey });
+                      linkArray.push({ from: rangeKey , to:  overLappingRangeKey});
                       //other thatn the above link (and the forlmula link)
                       //don't add any more links to the subsets
                       keysTorange.delete(rangeKey);
@@ -202,7 +202,7 @@ function traverseFormulaGroups(fGroup) {
       }
   }
   //remove links from subset nodes (links from their superset should be enough)
-  linkArray = linkArray.filter(link => keysTorange.has(link.from));
+  linkArray = linkArray.filter(link => keysTorange.has(link.to));
   for (const [rangeKey, range] of keysTorange.entries()) {
       let rangeSize = range.value.length;
       let overlapMetrics = range.overlapMetrics;
@@ -215,7 +215,7 @@ function traverseFormulaGroups(fGroup) {
               let overLappingRangSize = overLappingRange.value.length;
               if (numOverLap < rangeSize) {
                   if (overLappingRangSize > rangeSize){
-                      linkArray.push({ from: overLappingRangeKey, to: rangeKey });
+                      linkArray.push({ from: rangeKey , to:  overLappingRangeKey });
                   }
               } else {
                   throw new Error('Should never get here');
@@ -497,6 +497,7 @@ export async function run(myDiagram) {
 export async function highlight(nodeData) {
   try {
     await Excel.run(async (context) => {
+      //console.log(nodeData.key);
       let coordinates = nodeData.range.value;
       let sheetName = nodeData.range.sheetName;
       let sheet;
