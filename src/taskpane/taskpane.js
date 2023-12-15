@@ -341,6 +341,10 @@ function get_formula_groups(activeSheetName,rangeNamesToRef,startCoord,formulasR
           let [x, y] = stack.pop();
           let cellFormula = formulasR1C1[x][y];
           let cellFormulaA = formulasA[x][y];
+          if (cellFormula == null){
+            //most probably this cell was added more than once to the stack
+            continue;
+          }
           const tokens = tokenize(cellFormula);
           let index = 0;
           tokens.forEach(({ value, type, subtype}) => {
