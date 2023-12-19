@@ -61,8 +61,8 @@ function nodeSelectionChanged(node) {
 function updateDiagram(myDiagram, fGroup){
   //downloadObjectAsJson(fGroup, "test")
   //downloadObjectAsJs(fGroup, "test2")
-  let [linkArray, keysTorange] = traverseFormulaGroups(fGroup); //JSON.stringify(fGroup)
-  let { nodeDataArray, linkDataArray } = createGraph(fGroup,linkArray,keysTorange)
+  traverseFormulaGroups(fGroup); //JSON.stringify(fGroup)
+  let { nodeDataArray, linkDataArray } = createGraph(fGroup)
   myDiagram.model =new go.GraphLinksModel(nodeDataArray, linkDataArray);
 }
 
@@ -96,7 +96,6 @@ function downloadObjectAsJs(exportObj, exportName) {
   URL.revokeObjectURL(url);
 }
 function traverseFormulaGroups(fGroup) {
-  let linkArray = [];
   let coordToKeys = new Map();
   let keysTorange = new Map();
   fGroup.forEach((formula) => {
@@ -202,29 +201,7 @@ function traverseFormulaGroups(fGroup) {
           }
       }
   }
-  //remove links from subset nodes (links from their superset should be enough)
-  linkArray = linkArray.filter(link => keysTorange.has(link.to));
-  for (const [rangeKey, range] of keysTorange.entries()) {
-      let rangeSize = range.value.length;
-      let overlapMetrics = range.overlapMetrics;
-      if (overlapMetrics !== undefined) {
-          for (const [overLappingRangeKey, numOverLap] of overlapMetrics.entries()) {
-              let overLappingRange = keysTorange.get(overLappingRangeKey);
-              if (overLappingRange === undefined){
-                  continue; //might have been deleted
-              }
-              let overLappingRangSize = overLappingRange.value.length;
-              if (numOverLap < rangeSize) {
-                  if (overLappingRangSize > rangeSize){
-                      //linkArray.push({ from: rangeKey , to:  overLappingRangeKey });
-                  }
-              } else {
-                  //throw new Error('Should never get here');
-              }
-          }
-      }
-  }
-  return [linkArray, keysTorangeOrigin];
+
 }
 function columnNumberToLetter(columnIndex) {
   let columnLetter = '';
@@ -258,8 +235,9 @@ function getRangeFromCoord(operand){
   maxX += 1;
   return columnNumberToLetter(minY) + minX  + ':' + columnNumberToLetter(maxY) + maxX;
 }
-function createGraph(fGroup,linkArray,keysTorange) {
+function createGraph(fGroup) {
   let dataArray = [];
+  let linkArray = [];
 
   fGroup.forEach((formula) => {
       let cellFormula = formula.cellFormula;
@@ -301,59 +279,12 @@ function createGraph(fGroup,linkArray,keysTorange) {
         }
       });
   });
-  let linksFromFormulaOutputs = new Map();
   fGroup.forEach((formula) => {
     if(formula.loc.overlapMetrics !== undefined ){
-      formula.loc.overlapMetrics.forEach((value, overlapKey) => {
-      // let r =keysTorange.get(overlapKey)
-      // let createLink = true;
-      // if(r !== undefined && r.overlapMetrics !== undefined){
-      //   //formula key = 11
-      //   //formula.loc.overlapMetrics links out from formula
-      //   //{size: 2, 32 => 1, 34 => 1}
-      //   //32.overlapmetrics {size: 6, 11 => 1, 34 => 9, 13 => 9, 15 => 1, 46 => 300, …}
-      //   //don't create link from 11 to 32 since there is already a link from 34 to 32 and 34 is also output of 11
-      //   //if any keys other than 32 in formula.loc.overlapMetrics exist in 32.overlapmetrics, don't create link
-      //   for (let key of formula.loc.overlapMetrics.keys()) {
-      //     if(key != overlapKey && r.overlapMetrics.has(key)){
-      //       //createLink = false;
-      //     }
-      //   }
-
-      //   //for each function remove overlaps that are operands of that function
-      //   //Then for if remaining overlaps, also overlap with each other we only pick one of them. Which one?
-      //   // 
-
-
-      // }
-      // if (createLink)
-      //     linkArray.push({ to: formula.loc.key, from: overlapKey });
-        let keys = linksFromFormulaOutputs.get(overlapKey);
-        if (keys === undefined){
-          linksFromFormulaOutputs.set(overlapKey,[formula.loc.key])
-        } else {
-          keys.push(formula.loc.key)
-        }
+        formula.loc.overlapMetrics.forEach((value, overlapKey) => {
+          linkArray.push({ to: formula.loc.key, from: overlapKey });
       });
     }
-  });
-  linksFromFormulaOutputs.forEach((toKeys, fromKey) => {
-    toKeys.forEach( toKey => {
-      let createLink = true;
-      for (let otherToKey of toKeys) {
-          if(otherToKey != toKey){
-            let r =keysTorange.get(otherToKey)
-            if(r !== undefined && r.overlapMetrics !== undefined && r.overlapMetrics.has(toKey)){
-              //Found same link to fromKey in a more indirect way
-              //don't draw this link 
-              createLink = false;
-              break;
-            }
-          }
-      }
-      if (createLink)
-        linkArray.push({ to: toKey, from: fromKey });
-    });
   });
   return { nodeDataArray: dataArray, linkDataArray: linkArray };
 }
